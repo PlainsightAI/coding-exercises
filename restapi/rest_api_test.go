@@ -24,42 +24,52 @@ func TestTodos(t *testing.T) {
 	r := restapi.BuildRestAPI()
 	epTester := util.NewEndpointTester(r)
 
-	newTodo := map[string]interface{}{
+	newTodo1 := map[string]interface{}{
 		"title":      "My new todo",
 		"assigneeId": 2,
 	}
-	var createResp TodoWithUser
-	if err := epTester.Send("POST", "/todos", newTodo, &createResp); err != nil {
+	var createResp1 TodoWithUser
+	if err := epTester.Send("POST", "/todos", newTodo1, &createResp1); err != nil {
 		t.Fatal(err)
 	}
 
-	if createResp.Title != newTodo["title"] {
-		t.Errorf("Expected %s to equal %s", createResp.Title, newTodo["title"])
+	if createResp1.Title != newTodo1["title"] {
+		t.Errorf("Expected %s to equal %s", createResp1.Title, newTodo1["title"])
+	}
+
+	newTodo2 := map[string]interface{}{
+		"title": "My second todo",
+	}
+	var createResp2 TodoWithUser
+	if err := epTester.Send("POST", "/todos", newTodo2, &createResp2); err != nil {
+		t.Fatal(err)
+	}
+
+	if createResp2.Title != newTodo2["title"] {
+		t.Errorf("Expected %s to equal %s", createResp2.Title, newTodo2["title"])
 	}
 
 	t.Run("get", func(t *testing.T) {
 		t.Run("GetTodos", testGetTodos(epTester))
-		t.Run("GetByID", testGetTodoByID(epTester, createResp.ID))
+		t.Run("GetByID", testGetTodoByID(epTester, createResp1.ID))
 		t.Run("GetByID404", testGetTodoByID404(epTester, 10))
 	})
 
 	t.Run("update", func(t *testing.T) {
-		t.Run("UpdateTodo", testUpdateTodo(epTester, createResp.ID))
+		t.Run("UpdateTodo", testUpdateTodo(epTester, createResp1.ID))
 		t.Run("Update404", testUpdate404(epTester, 10))
 	})
 }
 
 func testGetTodos(epTester *util.EndpointTester) func(t *testing.T) {
 	return func(t *testing.T) {
-		t.Parallel()
-
 		var resp []*TodoWithUser
 		if err := epTester.Send("GET", "/todos", nil, &resp); err != nil {
 			t.Fatal(err)
 		}
 
-		if len(resp) != 1 {
-			t.Fatal("Expected 1 todo")
+		if len(resp) != 2 {
+			t.Fatal("Expected 2 todos")
 		}
 
 		if resp[0].Title != "My new todo" {
@@ -73,13 +83,19 @@ func testGetTodos(epTester *util.EndpointTester) func(t *testing.T) {
 		if resp[0].Assignee.Name != "Curly" {
 			t.Errorf("Expected %s to equal %s", resp[0].Assignee.Name, "Curly")
 		}
+
+		if resp[1].Title != "My second todo" {
+			t.Fatalf("Expected %s to equal 'My second todo'", resp[1].Title)
+		}
+
+		if resp[1].Assignee != nil {
+			t.Fatal("Expected no assignee for second todo")
+		}
 	}
 }
 
 func testGetTodoByID(epTester *util.EndpointTester, todoID int64) func(t *testing.T) {
 	return func(t *testing.T) {
-		t.Parallel()
-
 		var resp TodoWithUser
 		if err := epTester.Send("GET", fmt.Sprintf("/todos/%v", todoID), nil, &resp); err != nil {
 			t.Fatal(err)
@@ -93,8 +109,6 @@ func testGetTodoByID(epTester *util.EndpointTester, todoID int64) func(t *testin
 
 func testGetTodoByID404(epTester *util.EndpointTester, nonExistentTodoID int64) func(t *testing.T) {
 	return func(t *testing.T) {
-		t.Parallel()
-
 		var resp TodoWithUser
 		err := epTester.Send("GET", fmt.Sprintf("/todos/%v", nonExistentTodoID), nil, &resp)
 		if err == nil {
@@ -123,11 +137,40 @@ func testUpdateTodo(epTester *util.EndpointTester, todoID int64) func(t *testing
 		}
 
 		if resp.Assignee == nil {
-			t.Error("Expected an assignee for the first todo")
+			t.Error("Expected an assignee")
 		}
 
 		if resp.Assignee.Name != "Moe" {
 			t.Errorf("Expected %s to equal %s", resp.Assignee.Name, "Moe")
+		}
+
+		var getResp []*TodoWithUser
+		if err := epTester.Send("GET", "/todos", nil, &getResp); err != nil {
+			t.Fatal(err)
+		}
+
+		if len(getResp) != 2 {
+			t.Fatal("Expected 2 todos")
+		}
+
+		if getResp[0].Title != "My updated todo" {
+			t.Fatalf("Expected %s to equal 'My updated todo'", getResp[0].Title)
+		}
+
+		if getResp[0].Assignee == nil {
+			t.Error("Expected an assignee for the first todo")
+		}
+
+		if getResp[0].Assignee.Name != "Moe" {
+			t.Errorf("Expected %s to equal %s", getResp[0].Assignee.Name, "Moe")
+		}
+
+		if getResp[1].Title != "My second todo" {
+			t.Fatalf("Expected %s to equal 'My second todo'", getResp[1].Title)
+		}
+
+		if getResp[1].Assignee != nil {
+			t.Fatal("Expected no assignee for second todo")
 		}
 	}
 }
