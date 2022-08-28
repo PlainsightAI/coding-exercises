@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
 )
 
 // this is our in-memory `todo` table
@@ -24,6 +26,12 @@ type todo struct {
 	ID         int64
 	Title      string
 	AssigneeID *int64
+}
+
+type hydratedTodo struct {
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Assignee *user  `json:"assignee"`
 }
 
 // represents a `user` table record
@@ -56,27 +64,52 @@ func BuildRestAPI() *chi.Mux {
 			return
 		}
 
-		// implementation HERE
+		newTodo := todo{
+			ID:         time.Now().UnixNano(),
+			Title:      req.Title,
+			AssigneeID: req.AssigneeID,
+		}
 
-		http.Error(w, `{"message":"unimplemented"}`, http.StatusInternalServerError)
+		todos = append(todos, &newTodo)
+
+		render.Respond(w, r, todoWithAssignee(&newTodo))
 	})
 
 	r.Get("/todos", func(w http.ResponseWriter, r *http.Request) {
-		// implementation HERE
+		usersByID := mapUsersByID()
+		resp := make([]*hydratedTodo, len(todos))
 
-		http.Error(w, `{"message":"unimplemented"}`, http.StatusInternalServerError)
+		for i, todo := range todos {
+			var assignee *user
+			if todo.AssigneeID != nil {
+				assignee = usersByID[*todo.AssigneeID]
+			}
+
+			resp[i] = &hydratedTodo{
+				ID:       todo.ID,
+				Title:    todo.Title,
+				Assignee: assignee,
+			}
+		}
+
+		render.Respond(w, r, resp)
 	})
 
 	r.Get("/todos/{todoID}", func(w http.ResponseWriter, r *http.Request) {
-		_, err := strconv.Atoi(chi.URLParam(r, "todoID"))
+		todoID, err := strconv.Atoi(chi.URLParam(r, "todoID"))
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"message":%s}`, err.Error()), http.StatusBadRequest)
 			return
 		}
 
-		// implementation HERE
+		for _, todo := range todos {
+			if todo.ID == int64(todoID) {
+				render.Respond(w, r, todoWithAssignee(todo))
+				return
+			}
+		}
 
-		http.Error(w, `{"message":"unimplemented"}`, http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf(`{"message":"no todo found for id: %v"}`, todoID), http.StatusNotFound)
 	})
 
 	r.Put("/todos/{todoID}", func(w http.ResponseWriter, r *http.Request) {
@@ -86,16 +119,60 @@ func BuildRestAPI() *chi.Mux {
 			return
 		}
 
-		_, err := strconv.Atoi(chi.URLParam(r, "todoID"))
+		todoID, err := strconv.Atoi(chi.URLParam(r, "todoID"))
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"message":%s}`, err.Error()), http.StatusBadRequest)
 			return
 		}
 
-		// implementation HERE
+		updatedTodoIdx := -1
 
-		http.Error(w, `{"message":"unimplemented"}`, http.StatusInternalServerError)
+		for i, todo := range todos {
+			if todo.ID == int64(todoID) {
+				updatedTodoIdx = i
+				break
+			}
+		}
+
+		if updatedTodoIdx == -1 {
+			http.Error(w, fmt.Sprintf(`{"message":"no todo found for id: %v"}`, todoID), http.StatusNotFound)
+			return
+		}
+
+		updatedTodo := todos[updatedTodoIdx]
+		updatedTodo.Title = req.Title
+		updatedTodo.AssigneeID = req.AssigneeID
+
+		render.Respond(w, r, todoWithAssignee(updatedTodo))
 	})
 
 	return r
+}
+
+func mapUsersByID() map[int64]*user {
+	usersByID := make(map[int64]*user)
+
+	for _, user := range users {
+		usersByID[user.ID] = user
+	}
+
+	return usersByID
+}
+
+func todoWithAssignee(todo *todo) *hydratedTodo {
+	var assignee *user
+	if todo.AssigneeID != nil {
+		for _, user := range users {
+			if *todo.AssigneeID == user.ID {
+				assignee = user
+				break
+			}
+		}
+	}
+
+	return &hydratedTodo{
+		ID:       todo.ID,
+		Title:    todo.Title,
+		Assignee: assignee,
+	}
 }
