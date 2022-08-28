@@ -72,10 +72,12 @@ func BuildRestAPI() *chi.Mux {
 
 		todos = append(todos, &newTodo)
 
+		// for now the tests don't assert that this returns an assignee-hydrated todo
 		render.Respond(w, r, todoWithAssignee(&newTodo))
 	})
 
 	r.Get("/todos", func(w http.ResponseWriter, r *http.Request) {
+		// the join here offers a nice chance to ask about the naive quadratic double loop vs linear-ish time implementation you get with a hash map
 		usersByID := mapUsersByID()
 		resp := make([]*hydratedTodo, len(todos))
 
@@ -143,6 +145,7 @@ func BuildRestAPI() *chi.Mux {
 		updatedTodo.Title = req.Title
 		updatedTodo.AssigneeID = req.AssigneeID
 
+		// the tests DO assert that this one is assignee-hydrated
 		render.Respond(w, r, todoWithAssignee(updatedTodo))
 	})
 
